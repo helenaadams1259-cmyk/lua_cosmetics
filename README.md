@@ -429,9 +429,10 @@ Nếu bạn thấy trang web bán mỹ phẩm hiện ra, **chúc mừng, bạn �
 
 | Vai trò | Tên đăng nhập | Mật khẩu |
 |---|---|---|
-| Quản trị viên (Admin) | `admin` | _(điền mật khẩu vào đây)_ |
+| Quản trị viên (Admin) | `admin` | _admin123_ |
+| Khách hàng (User) | `nguyentho715@gmail.com` | _bosua123_ |
 
-> Dùng tài khoản này để vào trang quản trị và quản lý sản phẩm, danh mục, thương hiệu, đơn hàng.
+
 
 ---
 
