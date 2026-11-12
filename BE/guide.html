@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LuaCosmetics Technical Handbook</title>
+  <style>
+    :root {
+      --ink: #14213d;
+      --muted: #5f6b7a;
+      --line: #d8e0eb;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --accent: #1c6ed8;
+      --accent-soft: #eaf3ff;
+      --warn: #8b3b00;
+      --warn-soft: #fff4e6;
+      --ok: #0f6b3f;
+      --ok-soft: #eafaf2;
+    }
+    body { font-family: Arial, Helvetica, sans-serif; line-height: 1.7; color: #222; margin: 0; padding: 0; background: var(--bg); }
+    .container { max-width: 1100px; margin: 0 auto; padding: 36px; background: var(--panel); box-shadow: 0 10px 40px rgba(0,0,0,0.08); }
+    h1, h2, h3, h4 { color: var(--ink); }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; border-bottom: 2px solid var(--line); padding-bottom: 6px; }
+    h3 { margin-top: 1.25rem; }
+    p, li { font-size: 1rem; }
+    ul, ol { margin: 10px 0 12px 24px; }
+    code, pre { font-family: Consolas, "Courier New", monospace; }
+    code { background: #f4f7ff; padding: 2px 6px; border-radius: 4px; }
+    pre { background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 8px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0 18px; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: var(--accent-soft); color: var(--ink); }
+    .note, .callout, .warning, .good { padding: 14px 16px; border-radius: 8px; margin: 16px 0; }
+    .note { background: var(--accent-soft); border-left: 4px solid var(--accent); }
+    .warning { background: var(--warn-soft); border-left: 4px solid var(--warn); }
+    .good { background: var(--ok-soft); border-left: 4px solid var(--ok); }
+    .section { margin-bottom: 36px; }
+    .box { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; background: #fcfdff; margin: 16px 0; }
+    .pill { display: inline-block; margin-right: 8px; margin-bottom: 8px; padding: 4px 10px; background: #eef4ff; border-radius: 999px; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>LuaCosmetics Technical Handbook</h1>
+    <p>Đây là tài liệu tham khảo cho người mới bắt đầu làm việc với dự án LuaCosmetics. Mục tiêu của file này là giúp bạn hiểu cấu trúc hệ thống, nơi đặt logic, cách dữ liệu lưu trữ, cách auth hoạt động, và cách thêm feature mới mà không làm phá hệ thống.</p>
+    <p>Quan trọng: repo hiện tại chủ yếu là backend, không có frontend riêng trong workspace. Vì vậy phần frontend dưới đây mô tả cách một frontend nên giao tiếp với API này nếu bạn triển khai sau.</p>
+
+    <div class="section">
+      <h2>1. Project Overview</h2>
+      <p>LuaCosmetics là một API backend cho một cửa hàng mỹ phẩm/cosmetics. Mục tiêu chính là cho phép quản lý:</p>
+      <ul>
+        <li>sản phẩm</li>
+        <li>danh mục</li>
+        <li>thương hiệu</li>
+        <li>đơn hàng</li>
+        <li>người dùng</li>
+        <li>quyền admin</li>
+      </ul>
+      <p>Hệ thống được xây bằng FastAPI + SQLite. FastAPI chịu trách nhiệm nhận request HTTP, kiểm tra dữ liệu đầu vào, gọi logic nghiệp vụ, và trả response JSON hoặc CSV. SQLite được dùng như database local để đơn giản hóa phát triển và chạy thử.</p>
+
+      <div class="box">
+        <h3>Kiến trúc tổng thể</h3>
+        <table>
+          <thead>
+            <tr><th>Layer</th><th>Vai trò</th><th>Ví dụ file</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>HTTP layer</td><td>Nhận request, định nghĩa route, validate cơ bản bằng Pydantic</td><td>app/controllers/*.py</td></tr>
+            <tr><td>Service layer</td><td>Đóng gói logic nghiệp vụ, kiểm tra điều kiện, orchestrate thao tác</td><td>app/services/*.py</td></tr>
+            <tr><td>Repository layer</td><td>Thực hiện SQL, đọc/ghi dữ liệu, biến đổi kết quả</td><td>app/repositories/*.py</td></tr>
+            <tr><td>Database layer</td><td>Quản lý kết nối SQLite và schema ban đầu</td><td>app/db.py, sql/init_db.sql</td></tr>
+            <tr><td>Schema layer</td><td>Định nghĩa request/response shape</td><td>app/schemas/*.py</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Đây là một project theo phong cách MVC-ish, nhưng được điều chỉnh cho backend API. Không nên hiểu nó là một framework frontend; nó là một backend service dùng để phục vụ một client khác.</p>
+    </div>
+
+    <div class="section">
+      <h2>2. Backend Architecture</h2>
+      <p>Khi một request đi vào hệ thống, nó đi qua một số tầng theo thứ tự sau:</p>
+
+      <pre class="mermaid">graph TD
+A[Client] --> B[FastAPI Router]
+B --> C[Service]
+C --> D[Repository]
+D --> E[SQLite Database]
+E --> D
+D --> C
+C --> B
+B --> F[HTTP Response]</pre>
+
+      <div class="box">
+        <h3>2.1 Request lifecycle</h3>
+        <ol>
+          <li>Client gọi một endpoint như <code>GET /products</code> hoặc <code>POST /admin/products/bulk-csv</code>.</li>
+          <li>FastAPI nhận request và chọn router phù hợp.</li>
+          <li>Router đọc các tham số, body, file upload, header và gọi function xử lý.</li>
+          <li>Nếu cần auth, dependency như <code>Depends(get_current_user)</code> hoặc <code>Depends(require_admin)</code> sẽ chạy trước.</li>
+          <li>Controller gọi service hoặc repository để xử lý nghiệp vụ.</li>
+          <li>Repository thực hiện SQL và trả kết quả về.</li>
+          <li>FastAPI tự động serialize kết quả thành JSON hoặc định dạng khác.</li>
+        </ol>
+      </div>
+
+      <div class="box">
+        <h3>2.2 Router responsibility</h3>
+        <p>Router nằm trong <code>app/controllers</code>. Router không nên chứa SQL trực tiếp và không nên chứa logic phức tạp. Vai trò của router là:</p>
+        <ul>
+          <li>định nghĩa endpoint</li>
+          <li>nhận request và validate đầu vào bằng Pydantic</li>
+          <li>gọi service hoặc repository</li>
+          <li>trả response đúng format</li>
+        </ul>
+        <p>Ví dụ: <code>app/controllers/product_controller.py</code> định nghĩa các route cho public products, nhưng không nên tự viết câu SQL. Nếu bạn cần thêm logic filter, hãy cho vào repository hoặc service.</p>
+      </div>
+
+      <div class="box">
+        <h3>2.3 Service layer</h3>
+        <p>Service là nơi để đặt logic nghiệp vụ. Đây là lớp thích hợp khi bạn cần:</p>
+        <ul>
+          <li>kiểm tra dữ liệu trước khi lưu</li>
+          <li>tạo business rules</li>
+          <li>gọi nhiều repository cùng lúc</li>
+          <li>chuyển đổi dữ liệu trước/ sau khi xử lý</li>
+        </ul>
+        <p>Trong repo này, <code>app/services/base_service.py</code> cung cấp CRUD generic cho nhiều entity. Các service riêng như <code>UserService</code> và <code>AuthService</code> có logic càng cụ thể càng tốt.</p>
+        <p><strong>Rule:</strong> nếu logic là “business rule” chứ không phải “database query”, hãy đặt ở service. Nếu logic là “SELECT/INSERT/UPDATE/DELETE”, hãy đặt ở repository.</p>
+      </div>
+
+      <div class="box">
+        <h3>2.4 Repository layer</h3>
+        <p>Repository là tầng trực tiếp giao tiếp với SQLite. Nó gồm các hàm như:</p>
+        <ul>
+          <li><code>get()</code>, <code>list()</code>, <code>add()</code>, <code>update()</code>, <code>delete()</code></li>
+          <li>các hàm search/filter đặc thù như <code>filter_products()</code>, <code>search_admin_products()</code></li>
+          <li>các thao tác transaction cho order</li>
+        </ul>
+        <p>Repository nên tập trung vào SQL và dữ liệu. Nó không nên nhận request HTTP hoặc định nghĩa response. Nếu bạn cần trả một dict có cấu trúc chuẩn, repository vẫn có thể làm điều đó, nhưng không nên “biết” về user-facing response format quá sâu.</p>
+      </div>
+
+      <div class="box">
+        <h3>2.5 Database layer</h3>
+        <p>Database kết nối được setup trong <code>app/db.py</code>. Khi ứng dụng khởi động, <code>init_db()</code> sẽ chạy <code>sql/init_db.sql</code> để tạo tables nếu chưa tồn tại.</p>
+        <p>Đây là nơi bạn cần kiểm tra khi dữ liệu bất thường. Nếu một record không hiện lên như mong đợi, hãy nhìn:</p>
+        <ul>
+          <li>schema SQL</li>
+          <li>repository query</li>
+          <li>giá trị lưu vào DB</li>
+        </ul>
+      </div>
+
+      <div class="box">
+        <h3>2.6 Model layer</h3>
+        <p>Trong hệ thống này, “model” là sự kết hợp của SQL tables + Pydantic schemas + repository logic. Không có ORM như SQLAlchemy. Vì vậy bạn cần hiểu cả ba phần này để biết một entity được biểu diễn như thế nào.</p>
+        <p>Ví dụ product có:</p>
+        <ul>
+          <li>cột trong bảng <code>products</code> trong SQLite</li>
+          <li>schema trong <code>app/schemas/product_schema.py</code></li>
+          <li>repository trong <code>app/repositories/product_repository.py</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>3. Frontend Architecture</h2>
+      <p>Trong workspace hiện tại không có thư mục frontend. Điều này có nghĩa là backend đang được thiết kế để phục vụ một frontend riêng sau này. Nếu bạn thêm frontend, hãy giữ đúng phân tầng sau:</p>
+
+      <div class="box">
+        <h3>3.1 Frontend responsibilities</h3>
+        <ul>
+          <li><strong>Routing:</strong> điều hướng giữa các trang như danh sách sản phẩm, chi tiết, giỏ hàng, checkout, admin.</li>
+          <li><strong>Pages:</strong> mỗi trang chịu trách nhiệm render UI và gọi API.</li>
+          <li><strong>Components:</strong> phần tử UI lặp lại như button, card sản phẩm, modal, form.</li>
+          <li><strong>API layer:</strong> nơi gom tất cả request HTTP và xử lý response chuẩn.</li>
+          <li><strong>State management:</strong> lưu dữ liệu auth, giỏ hàng, user profile, danh sách sản phẩm.</li>
+          <li><strong>UI flow:</strong> component fetch data, render, user tương tác, gọi API tiếp.</li>
+        </ul>
+      </div>
+
+      <div class="box">
+        <h3>3.2 Where API calls should live</h3>
+        <p>Logic gọi API nên ở tầng API layer, không nên lẫn vào component. Nếu component đang trực tiếp viết <code>fetch()</code> ở nhiều chỗ, hãy tách thành hàm như <code>productApi.getProducts()</code> hoặc <code>adminApi.bulkImportProducts()</code>.</p>
+      </div>
+
+      <div class="box">
+        <h3>3.3 Where business logic should live</h3>
+        <p>Logic như “nếu user chưa login thì show login modal”, “nếu sản phẩm hết hàng thì disable nút mua”, “tính tổng tiền sau khi giảm giá” nên nằm ở tầng state hoặc service của frontend, chứ không nằm trong component render thô.</p>
+      </div>
+
+      <div class="box">
+        <h3>3.4 Typical page load flow</h3>
+        <ol>
+          <li>Trang mount.</li>
+          <li>Page gọi API layer.</li>
+          <li>API layer gọi backend endpoint.</li>
+          <li>Frontend nhận JSON.</li>
+          <li>State cập nhật.</li>
+          <li>Component render UI.</li>
+        </ol>
+        <p>Ví dụ: khi mở trang sản phẩm, frontend nên gọi <code>GET /products/product-filter</code> rồi render danh sách dựa trên kết quả.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>4. Authentication System</h2>
+      <p>Auth hiện tại dùng JWT và dependency injection. File chính là <code>app/auth.py</code>.</p>
+
+      <pre class="mermaid">sequenceDiagram
+participant Client
+participant FastAPI
+participant AuthDependency
+participant DB
+Client->>FastAPI: Request with Authorization Bearer token
+FastAPI->>AuthDependency: get_current_user()
+AuthDependency->>AuthDependency: Decode JWT
+AuthDependency->>DB: lookup user by username
+DB-->>AuthDependency: user row
+AuthDependency-->>FastAPI: user dict
+FastAPI-->>Client: protected response</pre>
+
+      <div class="box">
+        <h3>4.1 Login flow</h3>
+        <ol>
+          <li>Client gửi username/password đến endpoint login.</li>
+          <li>Backend xác thực mật khẩu bằng bcrypt.</li>
+          <li>Nếu đúng, server tạo JWT và trả về token.</li>
+          <li>Client lưu token ở client storage (ví dụ localStorage, memory, hoặc cookie nếu frontend được triển khai).</li>
+        </ol>
+      </div>
+
+      <div class="box">
+        <h3>4.2 How /admin/me works</h3>
+        <p>Endpoint <code>GET /admin/me</code> không đọc user từ một bảng riêng. Nó lấy thông tin user từ token và kiểm tra quyền admin. Nếu token hợp lệ và user là admin, response trả về profile.</p>
+        <p>Điều này khiến việc “lấy profile hiện tại” không cần một endpoint riêng cho user public.</p>
+      </div>
+
+      <div class="box">
+        <h3>4.3 Token storage and security</h3>
+        <p>Hiện code backend không làm việc trực tiếp với browser storage. Đây là trách nhiệm của frontend khi triển khai. Một frontend nên:</p>
+        <ul>
+          <li>lưu token an toàn</li>
+          <li>gửi token trong header <code>Authorization: Bearer ...</code></li>
+          <li>xoá token khi 401 hoặc logout</li>
+        </ul>
+      </div>
+
+      <div class="box">
+        <h3>4.4 401 handling and protected routes</h3>
+        <p>Nếu token không hợp lệ hoặc hết hạn, backend trả lỗi <code>401 Unauthorized</code>. Frontend nên:</p>
+        <ul>
+          <li>clear state auth</li>
+          <li>chuyển về màn hình login</li>
+          <li>không tiếp tục gọi API nữa cho đến khi user login lại</li>
+        </ul>
+        <p>Trong repo này, admin routes dùng dependency <code>Depends(require_admin)</code>, nên một request không có quyền admin sẽ nhận <code>403 Forbidden</code>.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>5. Database Design</h2>
+      <p>Database hiện tại là SQLite file <code>database.db</code>, schema được tạo bởi <code>sql/init_db.sql</code>. Vì không dùng ORM nên bạn cần đọc SQL schema trực tiếp khi sửa database.</p>
+
+      <div class="box">
+        <h3>5.1 Core tables</h3>
+        <table>
+          <thead>
+            <tr><th>Table</th><th>Mục đích</th><th>Ghi chú</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>categories</td><td>Nhóm sản phẩm</td><td>Mỗi category có slug, name, description, image</td></tr>
+            <tr><td>brands</td><td>Thương hiệu sản phẩm</td><td>Không có slug; dùng name và description</td></tr>
+            <tr><td>products</td><td>Sản phẩm chính</td><td>Chứa thông tin về giá, stock, loại, brand, flags</td></tr>
+            <tr><td>users</td><td>Tài khoản hệ thống</td><td>Chứa username, password hash, is_admin</td></tr>
+            <tr><td>orders</td><td>Đơn hàng</td><td>Bao gồm thông tin khách hàng và giá trị tổng</td></tr>
+            <tr><td>order_items</td><td>Item trong mỗi đơn hàng</td><td>Snapshot dữ liệu sản phẩm tại thời điểm đặt hàng</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="box">
+        <h3>5.2 Product-related tables</h3>
+        <table>
+          <thead>
+            <tr><th>Table</th><th>Vai trò</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>product_images</td><td>Ảnh có thể dùng để lưu nhiều ảnh riêng biệt</td></tr>
+            <tr><td>product_features</td><td>Danh sách feature nổi bật</td></tr>
+            <tr><td>product_ingredients</td><td>Thành phần sản phẩm</td></tr>
+            <tr><td>product_usages</td><td>Hướng dẫn sử dụng</td></tr>
+            <tr><td>product_specifications</td><td>Thông số kỹ thuật</td></tr>
+            <tr><td>reviews</td><td>Đánh giá sản phẩm</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="box">
+        <h3>5.3 Relationships</h3>
+        <ul>
+          <li><code>products.category_id</code> → <code>categories.id</code></li>
+          <li><code>products.brand_id</code> → <code>brands.id</code></li>
+          <li><code>order_items.order_id</code> → <code>orders.id</code> with <code>ON DELETE CASCADE</code></li>
+          <li><code>product_images.product_id</code> → <code>products.id</code></li>
+        </ul>
+        <p>Điều quan trọng: product và category/brand là mối quan hệ nhiều-1. Một category có nhiều product, một product chỉ thuộc 1 category. Một brand có nhiều product, một product chỉ thuộc 1 brand hoặc không có brand.</p>
+      </div>
+
+      <div class="box">
+        <h3>5.4 How images are stored</h3>
+        <p>Trong code hiện tại, <code>ProductRepository</code> lưu <code>images</code> dưới dạng JSON string trong cột <code>products.images</code>. Điều này là một design cụ thể của project, nên khi sửa code bạn nên tuân theo nó hoặc có suy nghĩ kỹ trước khi đổi.</p>
+        <p>Ví dụ dữ liệu lưu trong DB có thể là:</p>
+        <pre>["https://example.com/a.jpg", "https://example.com/b.jpg"]</pre>
+        <p>Nếu bạn cần thay đổi cách lưu ảnh, hãy cập nhật cả parser, repository, schema và frontend cùng lúc.</p>
+      </div>
+
+      <div class="box">
+        <h3>5.5 Constraints developers must respect</h3>
+        <ul>
+          <li><code>products.category_id</code> không được null vì schema dùng <code>NOT NULL</code>.</li>
+          <li><code>products.slug</code> phải unique.</li>
+          <li><code>users.username</code> phải unique.</li>
+          <li><code>orders.status</code> nên dùng các giá trị chuẩn như <code>pending</code>, <code>confirmed</code>, <code>shipping</code>, <code>completed</code>, <code>cancelled</code>.</li>
+          <li>Foreign keys được bật bằng <code>PRAGMA foreign_keys = ON</code>.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>6. Product Module</h2>
+      <p>Module sản phẩm là một trong những phần quan trọng nhất của project. Nó đóng vai trò cốt lõi cho storefront và admin management.</p>
+
+      <div class="box">
+        <h3>6.1 Product CRUD</h3>
+        <ul>
+          <li><code>GET /products</code> lấy danh sách sản phẩm công khai.</li>
+          <li><code>GET /products/slug/{slug}</code> lấy sản phẩm theo slug.</li>
+          <li><code>GET /products/{slug}/{product_id}</code> lấy sản phẩm theo ID và slug.</li>
+          <li><code>POST /admin/products</code> tạo sản phẩm mới.</li>
+          <li><code>PUT /admin/products/{product_id}</code> cập nhật sản phẩm.</li>
+          <li><code>DELETE /admin/products/{product_id}</code> xóa sản phẩm.</li>
+        </ul>
+      </div>
+
+      <div class="box">
+        <h3>6.2 Search, filters and pagination</h3>
+        <p>Product search hiện tại hỗ trợ:</p>
+        <ul>
+          <li>tìm theo <code>q</code> (name hoặc slug)</li>
+          <li>lọc theo khoảng giá</li>
+          <li>lọc theo brand</li>
+          <li>lọc theo category slug</li>
+          <li>phân trang bằng <code>page</code>, <code>page_size</code></li>
+        </ul>
+        <p>Logic này nằm trong <code>ProductRepository.filter_products()</code> và <code>count_filtered()</code>.</p>
+      </div>
+
+      <div class="box">
+        <h3>6.3 Product images</h3>
+        <p>Ảnh sản phẩm được chuyển đổi trước khi lưu vào DB. Trong repository, list ảnh được encode thành JSON string. Khi đọc lại, repository sẽ decode về list. Nếu bạn thêm trường ảnh mới hoặc thay đổi kiểu lưu, hãy sửa cả encode/decode logic.</p>
+      </div>
+
+      <div class="box">
+        <h3>6.4 Bulk CSV import</h3>
+        <p>Bulk import là một tính năng quan trọng trong admin. Endpoint:</p>
+        <ul>
+          <li><code>POST /admin/products/bulk-csv</code> để upload file CSV</li>
+          <li><code>GET /admin/products/bulk-csv/template</code> để download template CSV</li>
+        </ul>
+        <p>Flow thực tế là:</p>
+        <ol>
+          <li>Admin upload CSV.</li>
+          <li>Backend đọc file bằng <code>csv.DictReader</code>.</li>
+          <li>Parser validate từng dòng.</li>
+          <li>Parser kiểm tra <code>category_id</code> và <code>brand_id</code> có tồn tại không.</li>
+          <li>Nếu hợp lệ, backend tạo product hàng loạt.</li>
+          <li>Response trả về tổng dòng, số insert thành công, số lỗi.</li>
+        </ol>
+        <p>Đây là một ví dụ tốt về nơi logic “import” nên nằm. Parser và template logic ở <code>app/services/product_import_service.py</code>, route ở <code>app/controllers/admin_controller.py</code>.</p>
+      </div>
+
+      <div class="box">
+        <h3>6.5 CSV template format</h3>
+        <p>Template CSV sử dụng các cột như:</p>
+        <ul>
+          <li><code>name</code>, <code>slug</code>, <code>category_id</code>, <code>brand_id</code></li>
+          <li><code>price</code>, <code>original_price</code>, <code>stock</code></li>
+          <li><code>short_description</code>, <code>description</code>, <code>ingredients</code>, <code>usage_instructions</code></li>
+          <li><code>image_urls</code>, <code>featured</code>, <code>best_seller</code>, <code>new_product</code></li>
+        </ul>
+        <p>Nếu bạn đổi cột trong template, hãy đổi parser và test về cùng lúc.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>7. Category Module</h2>
+      <p>Category là bộ phận dùng để phân nhóm sản phẩm.</p>
+      <div class="box">
+        <h3>7.1 CRUD</h3>
+        <ul>
+          <li><code>POST /admin/categories</code> tạo danh mục</li>
+          <li><code>GET /admin/categories</code> lấy danh mục cho admin</li>
+          <li><code>PUT /admin/categories/{id}</code> cập nhật</li>
+          <li><code>DELETE /admin/categories/{id}</code> xóa</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>7.2 Relationships</h3>
+        <p>Một category có nhiều product. Nếu xóa category, các product đang tham chiếu category_id có thể vi phạm foreign key. Vì vậy khi thay đổi delete behavior, hãy suy nghĩ kỹ.</p>
+      </div>
+      <div class="box">
+        <h3>7.3 Validation</h3>
+        <p>Category nên có <code>name</code> và <code>slug</code>. Slug cần unique vì repository dùng unique constraint ở DB level. Nếu bạn thêm rule khác như bắt buộc image, hãy thêm ở schema và validation level.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>8. Brand Module</h2>
+      <p>Brand biểu thị thương hiệu của sản phẩm.</p>
+      <div class="box">
+        <h3>8.1 CRUD</h3>
+        <ul>
+          <li><code>POST /admin/brands</code></li>
+          <li><code>GET /admin/brands</code></li>
+          <li><code>PUT /admin/brands/{id}</code></li>
+          <li><code>DELETE /admin/brands/{id}</code></li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>8.2 Relationships</h3>
+        <p>Brand và product có mối quan hệ one-to-many. Nếu bạn xóa brand nhưng vẫn còn product dùng brand_id, database có thể lỗi. Hãy xử lý đúng bằng kiểm tra hoặc cập nhật product trước.</p>
+      </div>
+      <div class="box">
+        <h3>8.3 Validation</h3>
+        <p>Brand thường chỉ cần minimum là tên và mô tả. Nếu bạn thêm field như website hoặc logo, hãy cập nhật schema, repository và SQL đồng bộ.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>9. API Design Principles</h2>
+      <p>Project này đang dùng REST-style API. Các endpoint nên thống nhất và dễ đoán.</p>
+
+      <div class="box">
+        <h3>9.1 Naming conventions</h3>
+        <ul>
+          <li>resource dùng danh từ số nhiều: <code>/products</code>, <code>/categories</code>, <code>/orders</code></li>
+          <li>admin route dùng prefix <code>/admin</code></li>
+          <li>action cụ thể dùng path con như <code>/status</code>, <code>/bulk-csv</code>, <code>/me</code></li>
+        </ul>
+      </div>
+
+      <div class="box">
+        <h3>9.2 HTTP methods</h3>
+        <table>
+          <thead><tr><th>Method</th><th>Meaning</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td>GET</td><td>Read</td><td><code>/products</code></td></tr>
+            <tr><td>POST</td><td>Create</td><td><code>/admin/products</code></td></tr>
+            <tr><td>PUT</td><td>Update</td><td><code>/admin/orders/{id}</code></td></tr>
+            <tr><td>DELETE</td><td>Remove</td><td><code>/admin/products/{id}</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="box">
+        <h3>9.3 Response formats</h3>
+        <p>Hầu hết response là JSON object, trong một số endpoint như template CSV thì response là plain text CSV.</p>
+        <p>Pagination format theo kiểu:</p>
+        <pre>{
+  "data": [...],
+  "total": 25,
+  "maxPage": 3
+}</pre>
+        <p>Với các endpoint import, response nên trả về summary rõ ràng:</p>
+        <pre>{
+  "total_rows": 10,
+  "imported_rows": 8,
+  "failed_rows": 2,
+  "errors": [...] 
+}</pre>
+      </div>
+
+      <div class="box">
+        <h3>9.4 Error formats</h3>
+        <p>Backend hiện tại dùng FastAPI exception và trả về JSON thông thường như:</p>
+        <pre>{"detail": "Admin privileges required"}</pre>
+        <p>Cho import CSV, errors được gom vào list, không nên chỉ throw chung một exception cho cả file. Nếu có nhiều dòng lỗi, hãy trả list lỗi line by line.</p>
+      </div>
+
+      <div class="box">
+        <h3>9.5 How new endpoints should be implemented</h3>
+        <ol>
+          <li>Định nghĩa route trong controller.</li>
+          <li>Đặt logic nghiệp vụ vào service nếu cần.</li>
+          <li>Đặt SQL vào repository.</li>
+          <li>Định nghĩa schema request/response.</li>
+          <li>Thêm validation.</li>
+          <li>Test bằng request thật hoặc unit test nếu có thể.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>10. Folder-by-Folder Explanation</h2>
+      <table>
+        <thead><tr><th>Folder/file</th><th>Why it exists</th><th>What belongs here</th></tr></thead>
+        <tbody>
+          <tr><td>app/</td><td>Chứa toàn bộ application code</td><td>controllers, services, repositories, schemas, models, startup code</td></tr>
+          <tr><td>app/controllers/</td><td>HTTP routing layer</td><td>Route definitions, dependency injection, request parsing</td></tr>
+          <tr><td>app/services/</td><td>Business logic layer</td><td>Validation, orchestration, import logic, auth rules</td></tr>
+          <tr><td>app/repositories/</td><td>Persistence layer</td><td>SQL queries, CRUD, filters, joins, transaction</td></tr>
+          <tr><td>app/schemas/</td><td>Input/output contract layer</td><td>Pydantic models for request/response validation</td></tr>
+          <tr><td>app/models/</td><td>Domain/entity definitions</td><td>Simple data classes or model helpers if added</td></tr>
+          <tr><td>sql/</td><td>Database initialization scripts</td><td>CREATE TABLE, seed data, indexes</td></tr>
+          <tr><td>tests/</td><td>Regression safety</td><td>Unit tests for critical behavior such as CSV import</td></tr>
+        </tbody>
+      </table>
+      <div class="warning">Không đặt SQL trực tiếp vào controller. Không đặt logic UI vào repository. Không đặt response formatting vào database layer.</div>
+    </div>
+
+    <div class="section">
+      <h2>11. Coding Standards</h2>
+      <div class="box">
+        <h3>11.1 Naming</h3>
+        <ul>
+          <li>file names nên nhỏ, rõ ý nghĩa: <code>product_repository.py</code>, <code>auth_service.py</code></li>
+          <li>function names nên là động từ hoặc câu hỏi rõ ràng: <code>create_order</code>, <code>filter_products</code>, <code>get_current_user</code></li>
+          <li>biến nên mô tả intent: <code>category_id</code>, <code>product_payload</code>, <code>import_result</code></li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>11.2 Repositories and services</h3>
+        <ul>
+          <li>Repository chỉ làm dữ liệu.</li>
+          <li>Service có thể gọi nhiều repository và xử lý logic.</li>
+          <li>Controller chỉ chuyển dữ liệu HTTP.</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>11.3 Validation</h3>
+        <p>Hãy validate ở nhiều nơi:</p>
+        <ul>
+          <li>schema Pydantic cho request</li>
+          <li>service cho business rule</li>
+          <li>repository cho data integrity nếu cần</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>11.4 Error handling</h3>
+        <p>Không nên expose raw SQL traceback cho người dùng. Nên dùng <code>HTTPException</code> hoặc trả về error summary có cấu trúc rõ ràng. Đối với import CSV, nên trả list lỗi thay vì crash toàn bộ request.</p>
+      </div>
+      <div class="box">
+        <h3>11.5 Database access</h3>
+        <p>Luôn dùng repository hoặc service để thao tác DB. Tránh câu SQL trực tiếp trong controller. Khi thêm cột mới, hãy cập nhật cả SQL schema, repository, schema và test.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>12. Adding a New Feature</h2>
+      <p>Khi thêm một feature mới, hãy làm theo quy trình dưới đây để giảm rủi ro.</p>
+
+      <div class="box">
+        <h3>Ví dụ: thêm entity mới</h3>
+        <ol>
+          <li><strong>Bước 1:</strong> Xác định entity cần gì và có cần bảng mới không. Nếu có, sửa <code>sql/init_db.sql</code>.</li>
+          <li><strong>Bước 2:</strong> Tạo schema request/response trong <code>app/schemas/</code>.</li>
+          <li><strong>Bước 3:</strong> Tạo hoặc mở repository để thêm CRUD/query.</li>
+          <li><strong>Bước 4:</strong> Nếu cần logic nghiệp vụ, tạo hoặc mở service.</li>
+          <li><strong>Bước 5:</strong> Tạo router trong <code>app/controllers/</code>.</li>
+          <li><strong>Bước 6:</strong> Nếu có frontend, thêm API client và page.</li>
+          <li><strong>Bước 7:</strong> Thêm validation và error handling.</li>
+          <li><strong>Bước 8:</strong> Viết test hoặc ít nhất một manual smoke test.</li>
+          <li><strong>Bước 9:</strong> Cập nhật documentation.</li>
+        </ol>
+      </div>
+      <div class="note">Nếu feature ảnh hưởng đến DB, hãy xem lại foreign keys, unique constraints, và data migration. Đừng giả định dữ liệu cũ sẽ tự chuyển đổi.</div>
+    </div>
+
+    <div class="section">
+      <h2>13. Common Mistakes</h2>
+      <div class="box">
+        <h3>13.1 Bypassing the service layer</h3>
+        <p>Viết logic trực tiếp trong controller là sai vì làm controller trở nên “quá nặng”. Logic nghiệp vụ nên ở service. Nếu bạn cần test logic logic, service dễ test hơn router.</p>
+      </div>
+      <div class="box">
+        <h3>13.2 Writing SQL inside routers</h3>
+        <p>Router không nên biết SQL. Nếu bạn chèn câu SQL trực tiếp vào controller, bạn sẽ khó maintain, khó test, và khó tái sử dụng.</p>
+      </div>
+      <div class="box">
+        <h3>13.3 Calling repositories directly from frontend</h3>
+        <p>Frontend không có quyền gọi repository. Frontend chỉ gọi API HTTP. Nếu bạn viết frontend gọi SQLite trực tiếp, tức là bạn đang làm sai tầng phân chia.</p>
+      </div>
+      <div class="box">
+        <h3>13.4 Breaking response formats</h3>
+        <p>Đổi response structure mà không cập nhật frontend sẽ làm UI lỗi. Nếu cần đổi, hãy thống nhất và cập nhật tất cả consumer.</p>
+      </div>
+      <div class="box">
+        <h3>13.5 Forgetting validation</h3>
+        <p>Không validate input sẽ dẫn tới dữ liệu rác, lỗi cơ sở dữ liệu, và khó debug. Hãy validate ở schema và service.</p>
+      </div>
+      <div class="box">
+        <h3>13.6 Ignoring foreign keys</h3>
+        <p>Thêm product với category_id không tồn tại sẽ bị lỗi nếu không validate đúng. Hãy luôn kiểm tra foreign key trước khi insert.</p>
+      </div>
+      <div class="box">
+        <h3>13.7 Hardcoding URLs</h3>
+        <p>Đừng hardcode <code>http://127.0.0.1:8000</code> vào nhiều chỗ. Nếu deploy sang môi trường khác, việc này sẽ gây lỗi.</p>
+      </div>
+      <div class="box">
+        <h3>13.8 Mixing UI and business logic</h3>
+        <p>Frontend và backend mỗi bên nên có vai trò riêng. Logic business chính nên ở backend. UI chỉ quyết định cách hiển thị.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>14. Debugging Guide</h2>
+      <div class="box">
+        <h3>14.1 Backend issues</h3>
+        <ul>
+          <li>Kiểm tra endpoint trong <code>app/controllers</code>.</li>
+          <li>Xem request có đúng schema không.</li>
+          <li>Kiểm tra service có được gọi không.</li>
+          <li>Kiểm tra repository query.</li>
+          <li>Kiểm tra DB file <code>database.db</code>.</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>14.2 Authentication failures</h3>
+        <ul>
+          <li>Xác minh header <code>Authorization: Bearer xxx</code>.</li>
+          <li>Kiểm tra token có đúng secret và algorithm không.</li>
+          <li>Kiểm tra user trong DB còn tồn tại không.</li>
+          <li>Kiểm tra endpoint có dependency admin không.</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>14.3 CSV import failures</h3>
+        <ul>
+          <li>Kiểm tra header CSV có đúng tên cột không.</li>
+          <li>Kiểm tra giá trị <code>category_id</code> và <code>brand_id</code>.</li>
+          <li>Kiểm tra các field dạng boolean hoặc numeric.</li>
+          <li>Kiểm tra slug unique.</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>14.4 API errors and 401/403</h3>
+        <p>401 thường là auth issue. 403 thường là quyền không đủ. 400 thường là input/validation. 404 thường là route hoặc entity không tồn tại. 500 thường là exception chưa được handle đúng.</p>
+      </div>
+      <div class="box">
+        <h3>14.5 CORS and frontend issues</h3>
+        <p>Repo hiện tại không có cấu hình CORS; nếu frontend chạy trên domain khác, bạn cần thêm cấu hình CORS phù hợp. Không nên giả sử browser sẽ tự gọi API thành công nếu backend và frontend ở khác origin.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>15. Project Flow</h2>
+      <pre class="mermaid">graph LR
+A[User opens app] --> B[Frontend requests products]
+B --> C[GET /products]
+C --> D[ProductRepository]
+D --> E[SQLite]
+E --> D
+D --> C
+C --> B
+B --> F[Render UI]</pre>
+
+      <pre class="mermaid">sequenceDiagram
+participant Admin
+participant API
+participant ImportService
+participant DB
+Admin->>API: POST /admin/products/bulk-csv
+API->>ImportService: parse CSV
+ImportService->>DB: validate category_id/brand_id
+DB-->>ImportService: validation result
+ImportService-->>API: list of valid products
+API->>DB: insert each product
+DB-->>API: insert result
+API-->>Admin: summary report</pre>
+
+      <pre class="mermaid">flowchart TD
+A[Login] --> B[Create JWT]
+B --> C[Store token]
+C --> D[Call protected route]
+D --> E[Verify token]
+E --> F[Allow or deny]</pre>
+    </div>
+
+    <div class="section">
+      <h2>16. Important Things Every Developer Must Know</h2>
+      <div class="box">
+        <ul>
+          <li><strong>Never bypass the service layer.</strong> Nếu logic cần xử lý, đặt vào service.</li>
+          <li><strong>Always validate user input.</strong> Không phụ thuộc vào frontend.</li>
+          <li><strong>Never expose internal SQL errors.</strong> Trả về message rõ ràng, không leak stack trace.</li>
+          <li><strong>Keep API responses consistent.</strong> Nếu một endpoint trả pagination thì nên giữ cấu trúc thống nhất.</li>
+          <li><strong>Respect database constraints.</strong> Slug unique, foreign keys, status values, NOT NULL fields là quan trọng.</li>
+          <li><strong>Do not duplicate business logic.</strong> Nếu một rule dùng ở nhiều nơi, hãy đặt ở chỗ chung.</li>
+          <li><strong>Separate frontend and backend responsibilities.</strong> Frontend renders; backend stores and validates.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
