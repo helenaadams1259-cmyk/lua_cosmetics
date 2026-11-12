@@ -493,4 +493,4 @@ Máy chủ được tổ chức theo kiến trúc **Controller → Service → R
 
 ## 👤 Tác giả
 
-**Tên của bạn** · [GitHub](https://github.com/helenaadams1259-cmyk)
+**Tha Thi** · [GitHub](https://github.com/helenaadams1259-cmyk)
