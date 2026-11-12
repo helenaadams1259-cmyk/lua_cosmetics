@@ -101,10 +101,10 @@ python --version
 
 **Những lỗi người mới hay mắc:**
 
-- ❌ Chỉ gõ **nội dung** của lệnh. Đừng gõ chữ `bash` ở góc khung, và đừng gõ dấu ` ``` `.
-- ❌ Khung nào có nhiều dòng thì gõ **từng dòng một**, nhấn Enter sau mỗi dòng.
-- ❌ Đừng tự thêm hoặc bớt dấu cách. `-u` và `- u` là hai thứ khác nhau.
-- ❌ Đừng bấm vào chỗ khác rồi mới gõ. Chữ sẽ không vào terminal.
+❌ Chỉ gõ **nội dung** của lệnh. Đừng gõ chữ `bash` ở góc khung, và đừng gõ dấu ` ``` `.
+❌ Khung nào có nhiều dòng thì gõ **từng dòng một**, nhấn Enter sau mỗi dòng.
+❌ Đừng tự thêm hoặc bớt dấu cách. `-u` và `- u` là hai thứ khác nhau.
+❌ Đừng bấm vào chỗ khác rồi mới gõ. Chữ sẽ không vào terminal.
 
 ### 📍 "Đứng trong thư mục" nghĩa là gì?
 
@@ -480,7 +480,7 @@ Nếu bạn thấy trang web bán mỹ phẩm hiện ra, **chúc mừng, bạn �
 lua_cosmetics/
 ├── BE/                 # Máy chủ (Backend, FastAPI)
 │   ├── app/            # Code chính: controllers, services, repositories, schemas
-│   ├── .env.example    # File mẫu cấu hình (sao chép thành .env)
+│   ├── .env.example (chưa có, sẽ update sau)    # File mẫu cấu hình (sao chép thành .env)
 │   ├── sql/            # File SQL: init_db.sql, lua_cosmetics.sql
 │   └── tests/          # Các bài kiểm tra tự động
 ├── FE/                 # Giao diện (Frontend, React + TypeScript)
