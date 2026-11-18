@@ -20,6 +20,12 @@ MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
 MYSQL_USER = os.getenv("MYSQL_USER", "root")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "root")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "lua_cosmetics")
+MYSQL_SSL = os.getenv("MYSQL_SSL", "false").lower() == "true"
+SSL_KWARGS = (
+    {"ssl_ca": "/etc/ssl/certs/ca-certificates.crt", "ssl_verify_cert": True, "ssl_verify_identity": True}
+    if MYSQL_SSL
+    else {}
+)
 
 UNLIMITED_ROWS = 18446744073709551615
 
@@ -56,8 +62,8 @@ def _open_connection(database: str | None = MYSQL_DATABASE) -> pymysql.connectio
         cursorclass=DictCursor,
         autocommit=True,
         conv=_text_conversions,
+        **SSL_KWARGS,
     )
-
 
 class Database:
     def __init__(self):
