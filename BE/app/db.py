@@ -62,6 +62,7 @@ def _open_connection(database: str | None = MYSQL_DATABASE) -> pymysql.connectio
         cursorclass=DictCursor,
         autocommit=True,
         conv=_text_conversions,
+        init_command="SET time_zone = '+07:00'",
         **SSL_KWARGS,
     )
 
